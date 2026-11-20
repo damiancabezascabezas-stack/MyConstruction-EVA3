@@ -8,14 +8,15 @@ pipeline {
 
     environment {
         ARTIFACTORY_URL = 'http://localhost:8082/artifactory'
-        ARTIFACTORY_REPO = 'myconstruction-libs-snapshot'
+        ARTIFACTORY_REPO = 'myconstruction-eva3-snapshot'
     }
 
     stages {
 
-        stage('Verificar entorno') {
+        stage('Verificar entorno JVM') {
             steps {
                 bat 'java -version'
+                bat 'javac -version'
                 bat 'mvn -version'
             }
         }
@@ -32,23 +33,23 @@ pipeline {
             }
         }
 
-        stage('Generar artefactos') {
+        stage('Generar archivo WAR') {
             steps {
                 bat 'mvn -B package -DskipTests'
             }
         }
 
-        stage('Archivar artefactos') {
+        stage('Archivar WAR') {
             steps {
                 archiveArtifacts(
-                    artifacts: 'target/*.war,target/*.jar',
+                    artifacts: 'target/*.war',
                     fingerprint: true,
                     allowEmptyArchive: false
                 )
             }
         }
 
-        stage('Publicar JAR en Artifactory') {
+        stage('Publicar WAR en Artifactory') {
             steps {
                 withCredentials([
                     string(
@@ -59,32 +60,21 @@ pipeline {
                     powershell '''
                         $ErrorActionPreference = 'Stop'
 
-                        $jar = Get-ChildItem -Path 'target' `
-                            -Filter '*-classes.jar' |
-                            Select-Object -First 1
-
-                        if (-not $jar) {
-                            throw 'No se encontro el archivo JAR.'
-                        }
+                        $war = Get-Item 'target/MyConstruction-EVA3.war'
 
                         $destino = "$env:ARTIFACTORY_URL/" +
                             "$env:ARTIFACTORY_REPO/" +
-                            "cl/myconstruction/MyConstruction/" +
+                            "cl/myconstruction/MyConstruction-EVA3/" +
                             "1.0-SNAPSHOT/" +
-                            $jar.Name
+                            $war.Name
 
                         $headers = @{
                             Authorization = "Bearer $env:ARTIFACTORY_TOKEN"
                         }
 
-                        Invoke-RestMethod `
-                            -Uri $destino `
-                            -Method Put `
-                            -Headers $headers `
-                            -InFile $jar.FullName `
-                            -ContentType 'application/java-archive'
+                        Invoke-RestMethod -Uri $destino -Method Put -Headers $headers -InFile $war.FullName -ContentType 'application/octet-stream'
 
-                        Write-Host 'JAR publicado en Artifactory.'
+                        Write-Host 'WAR publicado correctamente en Artifactory.'
                     '''
                 }
             }
@@ -93,11 +83,11 @@ pipeline {
 
     post {
         success {
-            echo 'MyConstruction compilado y publicado correctamente.'
+            echo 'MyConstruction-EVA3 compilado y publicado correctamente.'
         }
 
         failure {
-            echo 'Error durante el pipeline de MyConstruction.'
+            echo 'Error durante el pipeline de MyConstruction-EVA3.'
         }
     }
 }
